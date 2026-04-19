@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400, initial-scale=1.0">
+  <title>Focus Clash</title>
+  <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app" class="app">
+    
+    <!-- ═══ HEADER ═══ -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo-icon">⚔️</span>
+        <h1 class="logo-text">Focus Clash</h1>
+      </div>
+      <button id="btn-dashboard" class="btn-icon" title="Dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+    </header>
+
+    <!-- ═══ PROFILE BAR ═══ -->
+    <div id="profile-bar" class="profile-bar">
+      <div class="level-badge">
+        <span id="level-icon" class="level-icon">🥉</span>
+        <span id="level-name" class="level-name">Bronze</span>
+      </div>
+      <div class="xp-container">
+        <div class="xp-bar">
+          <div id="xp-fill" class="xp-fill" style="width: 0%"></div>
+        </div>
+        <span id="xp-text" class="xp-text">0 / 500 XP</span>
+      </div>
+      <div class="quick-stats">
+        <div class="stat">
+          <span class="stat-value" id="stat-streak">0</span>
+          <span class="stat-label">🔥 Streak</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" id="stat-today">0m</span>
+          <span class="stat-label">📚 Today</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ IDLE SCREEN ═══ -->
+    <div id="screen-idle" class="screen active">
+      <div class="mode-selector">
+        <label class="mode-label">Mode</label>
+        <div class="mode-buttons">
+          <button class="mode-btn" data-mode="chill" title="No strict rules">🟢 Chill</button>
+          <button class="mode-btn selected" data-mode="competitive" title="Leaderboard + Anti-cheat">🔴 Competitive</button>
+          <button class="mode-btn" data-mode="deep_focus" title="Strict rules + High rewards">🧘 Deep Focus</button>
+        </div>
+      </div>
+      <button id="btn-new-session" class="btn-primary btn-glow">
+        <span class="btn-icon-inner">⚔️</span>
+        New Session
+      </button>
+    </div>
+
+    <!-- ═══ SETUP SCREEN ═══ -->
+    <div id="screen-setup" class="screen">
+      <div class="setup-section">
+        <label class="field-label">🎯 What's your goal?</label>
+        <input type="text" id="input-goal" class="input-field" placeholder="e.g. Watch 2-hour lecture" maxlength="100">
+      </div>
+      <div class="setup-section">
+        <label class="field-label">⏱️ Duration</label>
+        <div class="preset-buttons">
+          <button class="preset-btn" data-minutes="25">25m</button>
+          <button class="preset-btn" data-minutes="45">45m</button>
+          <button class="preset-btn selected" data-minutes="60">1h</button>
+          <button class="preset-btn" data-minutes="90">1.5h</button>
+          <button class="preset-btn" data-minutes="120">2h</button>
+        </div>
+        <div class="custom-duration">
+          <input type="number" id="input-custom-minutes" class="input-field input-small" placeholder="Custom" min="1" max="480">
+          <span class="unit-label">minutes</span>
+        </div>
+      </div>
+      <div class="setup-section">
+        <label class="field-label">⏰ Timer Type</label>
+        <div class="toggle-group">
+          <button class="toggle-btn selected" data-timer="countdown">Countdown</button>
+          <button class="toggle-btn" data-timer="stopwatch">Stopwatch</button>
+        </div>
+      </div>
+      <div class="setup-actions">
+        <button id="btn-back-idle" class="btn-secondary">← Back</button>
+        <button id="btn-start-session" class="btn-primary btn-glow">Start Session ⚔️</button>
+      </div>
+    </div>
+
+    <!-- ═══ ACTIVE SESSION SCREEN ═══ -->
+    <div id="screen-active" class="screen">
+      <div id="session-goal" class="session-goal">Focus Session</div>
+      <div class="timer-ring-container">
+        <svg class="timer-ring" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="timer-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#7c3aed"/>
+              <stop offset="100%" style="stop-color:#06b6d4"/>
+            </linearGradient>
+          </defs>
+          <circle class="timer-ring-bg" cx="100" cy="100" r="88" />
+          <circle id="timer-ring-progress" class="timer-ring-progress" cx="100" cy="100" r="88" 
+                  stroke-dasharray="553" stroke-dashoffset="0" />
+        </svg>
+        <div class="timer-center">
+          <div id="timer-display" class="timer-display">00:00</div>
+          <div id="timer-label" class="timer-label">remaining</div>
+        </div>
+      </div>
+      <div class="session-stats">
+        <div class="session-stat">
+          <span class="session-stat-icon activity-pulse" id="activity-indicator">●</span>
+          <span id="stat-activity" class="session-stat-value">100%</span>
+          <span class="session-stat-label">Activity</span>
+        </div>
+        <div class="session-stat">
+          <span class="session-stat-icon">🔀</span>
+          <span id="stat-tabs" class="session-stat-value">0</span>
+          <span class="session-stat-label">Tab Switches</span>
+        </div>
+        <div class="session-stat">
+          <span class="session-stat-icon">🎯</span>
+          <span id="stat-score-live" class="session-stat-value">0</span>
+          <span class="session-stat-label">Score</span>
+        </div>
+      </div>
+      <div class="session-actions">
+        <button id="btn-pause" class="btn-action btn-pause">⏸ Pause</button>
+        <button id="btn-resume" class="btn-action btn-resume" style="display:none">▶ Resume</button>
+        <button id="btn-end" class="btn-action btn-end">⏹ End</button>
+      </div>
+    </div>
+
+    <!-- ═══ RESULTS SCREEN ═══ -->
+    <div id="screen-results" class="screen">
+      <div class="results-header">
+        <div class="results-icon">🏆</div>
+        <h2 class="results-title">Session Complete!</h2>
+      </div>
+      <div class="score-display">
+        <div class="score-big" id="result-score">0</div>
+        <div class="score-label">Focus Score</div>
+      </div>
+      <div class="results-breakdown">
+        <div class="breakdown-row">
+          <span>⏱️ Time</span>
+          <span id="result-time">0 min</span>
+        </div>
+        <div class="breakdown-row">
+          <span>📊 Engagement</span>
+          <span id="result-engagement">0%</span>
+        </div>
+        <div class="breakdown-row">
+          <span>🔥 Streak Multiplier</span>
+          <span id="result-consistency">1.0x</span>
+        </div>
+        <div class="breakdown-row penalty">
+          <span>⚠️ Penalties</span>
+          <span id="result-penalties">-0</span>
+        </div>
+      </div>
+      <div class="xp-earned" id="xp-earned-section">
+        <div class="xp-earned-amount">
+          <span>+</span><span id="result-xp">0</span><span> XP</span>
+        </div>
+        <div id="xp-bonuses" class="xp-bonuses"></div>
+      </div>
+      <div id="achievements-section" class="achievements-section" style="display:none">
+        <h3 class="achievements-title">🎖️ New Achievements!</h3>
+        <div id="achievements-list" class="achievements-list"></div>
+      </div>
+      <div class="results-actions">
+        <button id="btn-new-after-result" class="btn-primary">New Session</button>
+        <button id="btn-dashboard-result" class="btn-secondary">📊 Dashboard</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="../lib/constants.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

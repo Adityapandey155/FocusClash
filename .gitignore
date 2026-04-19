@@ -1,0 +1,21 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Logs
+*.log
+
+# Node (if added later)
+node_modules/
+npm-debug.log*
+
+# Python (icon generation script artifacts)
+__pycache__/
+*.pyc
