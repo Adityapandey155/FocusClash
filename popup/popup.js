@@ -1,5 +1,5 @@
 // ============================================================
-// FOCUS CLASH — POPUP CONTROLLER
+// FOCUS CLASH — POPUP CONTROLLER (with Firebase Auth)
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -9,34 +9,287 @@ document.addEventListener("DOMContentLoaded", () => {
 
 class PopupApp {
   constructor() {
-    // Screens
     this.screens = {
-      idle: document.getElementById("screen-idle"),
-      setup: document.getElementById("screen-setup"),
-      active: document.getElementById("screen-active"),
+      auth:    document.getElementById("screen-auth"),
+      idle:    document.getElementById("screen-idle"),
+      setup:   document.getElementById("screen-setup"),
+      active:  document.getElementById("screen-active"),
       results: document.getElementById("screen-results"),
     };
 
-    // State
-    this.selectedMode = "competitive";
-    this.selectedMinutes = 60;
+    // Session state
+    this.selectedMode      = "competitive";
+    this.selectedMinutes   = 60;
     this.selectedTimerType = "countdown";
-    this.tickInterval = null;
-    this.sessionStartTime = null;
-    this.sessionPausedMs = 0;
+    this.tickInterval      = null;
+
+    // Auth state
+    this.currentUser           = null;
+    this.usernameCheckTimeout  = null;
   }
+
+  // ── Init ───────────────────────────────────────────────────
 
   async init() {
     this.bindEvents();
-    await this.loadProfile();
-    await this.checkActiveSession();
-    this.startLiveTimer();
+    this.bindAuthEvents();
+    await this.initAuth();
 
     // Listen for background messages
     chrome.runtime.onMessage.addListener((msg) => this.handleMessage(msg));
   }
 
-  // ── Event Binding ──────────────────────────────────────────
+  // ── Auth Initialization ────────────────────────────────────
+
+  async initAuth() {
+    FCAuth.ensure();
+
+    // Fast path: check chrome.storage cache to avoid flash of auth screen
+    const cached = await FCAuth.getCurrentUserFromStorage();
+
+    if (cached) {
+      // User was previously logged in — show app immediately, load data async
+      this.currentUser = cached;
+      this.showScreen("idle");            // ← hide auth screen right away
+      this.applyAuthState(cached, /* firstLoad= */ true); // data loads in background
+    } else {
+      // No cached user → show auth screen
+      this.showScreen("auth");
+    }
+
+    // Firebase Auth persistent listener (corrects cache if session expired)
+    FCAuth.onAuthChange(async (user) => {
+      if (user) {
+        const wasLoggedOut = !this.currentUser;
+        this.currentUser = user;
+        this.updateHeaderUser(user);
+
+        if (wasLoggedOut) {
+          // Firebase confirmed login after we showed auth screen
+          await this.applyAuthState(user, /* firstLoad= */ true);
+        }
+      } else {
+        // Firebase says no session
+        if (this.currentUser) {
+          this.currentUser = null;
+          this.stopLiveTimer();
+          this.hideProfileBar();
+          this.updateHeaderUser(null);
+          this.showScreen("auth");
+        }
+      }
+    });
+  }
+
+  async applyAuthState(user, firstLoad = false) {
+    this.updateHeaderUser(user);
+    this.showProfileBar();
+    await this.loadProfile();
+    await this.loadDailyStats();
+
+    if (firstLoad) {
+      await this.checkActiveSession();
+      this.startLiveTimer();
+    }
+  }
+
+  // ── Auth: Event Binding ────────────────────────────────────
+
+  bindAuthEvents() {
+    // Tab switching
+    document.querySelectorAll(".auth-tab").forEach((tab) => {
+      tab.addEventListener("click", () => this.switchAuthTab(tab.dataset.authTab));
+    });
+
+    // Sign in
+    document.getElementById("btn-signin").addEventListener("click", () => this.handleSignIn());
+
+    // Sign up
+    document.getElementById("btn-signup").addEventListener("click", () => this.handleSignUp());
+
+    // Sign out
+    document.getElementById("btn-signout").addEventListener("click", () => this.handleSignOut());
+
+    // Username availability check (live, debounced)
+    document.getElementById("auth-username").addEventListener("input", (e) => {
+      clearTimeout(this.usernameCheckTimeout);
+      const val = e.target.value.trim();
+      const statusEl = document.getElementById("username-status");
+
+      if (val.length < 3) {
+        statusEl.textContent = "";
+        statusEl.className = "username-check-status";
+        return;
+      }
+      statusEl.textContent = "checking…";
+      statusEl.className = "username-check-status";
+      this.usernameCheckTimeout = setTimeout(() => this.checkUsername(val), 600);
+    });
+
+    // Enter-key shortcuts
+    ["auth-email-login", "auth-password-login"].forEach((id) => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") this.handleSignIn();
+      });
+    });
+    ["auth-email-signup", "auth-username", "auth-password-signup"].forEach((id) => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") this.handleSignUp();
+      });
+    });
+  }
+
+  switchAuthTab(tab) {
+    document.querySelectorAll(".auth-tab").forEach((t) => t.classList.remove("active"));
+    document.querySelector(`.auth-tab[data-auth-tab="${tab}"]`).classList.add("active");
+
+    document.getElementById("auth-form-login").style.display  = tab === "login"  ? "" : "none";
+    document.getElementById("auth-form-signup").style.display = tab === "signup" ? "" : "none";
+
+    // Clear errors on switch
+    document.getElementById("auth-error-login").textContent  = "";
+    document.getElementById("auth-error-signup").textContent = "";
+  }
+
+  // ── Auth: Sign In ──────────────────────────────────────────
+
+  async handleSignIn() {
+    const email    = document.getElementById("auth-email-login").value.trim();
+    const password = document.getElementById("auth-password-login").value;
+    const errEl    = document.getElementById("auth-error-login");
+
+    if (!email || !password) { errEl.textContent = "Please fill in all fields."; return; }
+
+    const btn = document.getElementById("btn-signin");
+    btn.disabled = true;
+    btn.querySelector("span").textContent = "Signing in…";
+    errEl.textContent = "";
+
+    try {
+      const user = await FCAuth.signIn(email, password);
+      this.currentUser = user;
+      this.showScreen("idle");            // ← hide auth screen immediately on success
+      await this.applyAuthState(user, /* firstLoad= */ true);
+    } catch (e) {
+      errEl.textContent = this.getAuthError(e);
+    } finally {
+      btn.disabled = false;
+      btn.querySelector("span").textContent = "Sign In ⚔️";
+    }
+  }
+
+  // ── Auth: Sign Up ──────────────────────────────────────────
+
+  async handleSignUp() {
+    const email    = document.getElementById("auth-email-signup").value.trim();
+    const username = document.getElementById("auth-username").value.trim();
+    const password = document.getElementById("auth-password-signup").value;
+    const errEl    = document.getElementById("auth-error-signup");
+
+    if (!email || !username || !password) { errEl.textContent = "Please fill in all fields."; return; }
+    if (username.length < 3)              { errEl.textContent = "Username must be at least 3 characters."; return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) { errEl.textContent = "Username: letters, numbers and underscores only."; return; }
+    if (password.length < 6)              { errEl.textContent = "Password must be at least 6 characters."; return; }
+
+    const btn = document.getElementById("btn-signup");
+    btn.disabled = true;
+    btn.querySelector("span").textContent = "Creating account…";
+    errEl.textContent = "";
+
+    try {
+      const user = await FCAuth.signUp(email, password, username);
+      this.currentUser = user;
+      this.showScreen("idle");            // ← hide auth screen immediately on success
+      await this.applyAuthState(user, /* firstLoad= */ true);
+    } catch (e) {
+      errEl.textContent = this.getAuthError(e);
+    } finally {
+      btn.disabled = false;
+      btn.querySelector("span").textContent = "Create Account 🚀";
+    }
+  }
+
+  // ── Auth: Sign Out ─────────────────────────────────────────
+
+  async handleSignOut() {
+    try {
+      await FCAuth.signOut();
+      this.currentUser = null;
+      this.stopLiveTimer();
+      this.hideProfileBar();
+      this.updateHeaderUser(null);
+      this.showScreen("auth");
+    } catch (e) {
+      console.error("Sign out error:", e);
+    }
+  }
+
+  // ── Auth: Username Availability ────────────────────────────
+
+  async checkUsername(username) {
+    const statusEl = document.getElementById("username-status");
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      statusEl.textContent = "✗ Invalid characters";
+      statusEl.className   = "username-check-status taken";
+      return;
+    }
+
+    try {
+      const available = await FCAuth.checkUsernameAvailable(username);
+      statusEl.textContent = available ? "✓ Available" : "✗ Already taken";
+      statusEl.className   = `username-check-status ${available ? "available" : "taken"}`;
+    } catch (e) {
+      statusEl.textContent = "";
+      statusEl.className   = "username-check-status";
+    }
+  }
+
+  // ── Auth: Helpers ──────────────────────────────────────────
+
+  updateHeaderUser(user) {
+    const nameEl = document.getElementById("header-username");
+    const outBtn = document.getElementById("btn-signout");
+
+    if (user) {
+      nameEl.textContent  = `@${user.username}`;
+      nameEl.style.display = "";
+      outBtn.style.display = "";
+    } else {
+      nameEl.style.display = "none";
+      outBtn.style.display = "none";
+    }
+  }
+
+  showProfileBar()  { document.getElementById("profile-bar").style.display = ""; }
+  hideProfileBar()  { document.getElementById("profile-bar").style.display = "none"; }
+
+  getAuthError(e) {
+    const code = e.code || "";
+    if (code.includes("user-not-found") || code.includes("wrong-password") || code.includes("invalid-credential"))
+      return "Invalid email or password.";
+    if (code.includes("email-already-in-use")) return "Email is already registered.";
+    if (code.includes("invalid-email"))        return "Invalid email address.";
+    if (code.includes("weak-password"))        return "Password is too weak (min 6 chars).";
+    if (code.includes("network-request-failed")) return "Network error. Check your connection.";
+    return e.message || "An error occurred. Please try again.";
+  }
+
+  // ── Session Sync to Firebase ───────────────────────────────
+
+  async syncSessionToFirebase(sessionResult) {
+    if (!this.currentUser || !sessionResult) return false;
+    try {
+      FCDB.ensure();
+      await FCDB.saveSession(sessionResult, this.currentUser);
+      return true;
+    } catch (e) {
+      console.warn("Firebase sync failed:", e);
+      return false;
+    }
+  }
+
+  // ── Event Binding (Existing) ───────────────────────────────
 
   bindEvents() {
     // Mode buttons
@@ -64,7 +317,7 @@ class PopupApp {
       const val = parseInt(e.target.value);
       if (val > 0) {
         this.selectedMinutes = val;
-        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("selected"));
+        document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("selected"));
       }
     });
 
@@ -77,9 +330,9 @@ class PopupApp {
     document.getElementById("btn-start-session").addEventListener("click", () => this.startSession());
 
     // Session controls
-    document.getElementById("btn-pause").addEventListener("click", () => this.pauseSession());
+    document.getElementById("btn-pause").addEventListener("click",  () => this.pauseSession());
     document.getElementById("btn-resume").addEventListener("click", () => this.resumeSession());
-    document.getElementById("btn-end").addEventListener("click", () => this.endSession());
+    document.getElementById("btn-end").addEventListener("click",    () => this.endSession());
 
     // Results actions
     document.getElementById("btn-new-after-result").addEventListener("click", () => {
@@ -87,14 +340,14 @@ class PopupApp {
     });
 
     // Dashboard buttons
-    document.getElementById("btn-dashboard").addEventListener("click", () => this.openDashboard());
+    document.getElementById("btn-dashboard").addEventListener("click",        () => this.openDashboard());
     document.getElementById("btn-dashboard-result").addEventListener("click", () => this.openDashboard());
   }
 
   // ── Screen Management ──────────────────────────────────────
 
   showScreen(name) {
-    Object.values(this.screens).forEach(s => s.classList.remove("active"));
+    Object.values(this.screens).forEach((s) => s.classList.remove("active"));
     if (this.screens[name]) {
       this.screens[name].classList.add("active");
     }
@@ -106,31 +359,32 @@ class PopupApp {
     try {
       const profile = await this.sendMessage({ type: "GET_PROFILE" });
       const settings = await this.sendMessage({ type: "GET_SETTINGS" });
-      const dailyStats = await this.sendMessage({ type: "GET_DAILY_STATS" });
 
-      if (profile) {
-        this.updateProfileUI(profile);
-      }
+      if (profile) this.updateProfileUI(profile);
 
       if (settings) {
         this.selectedMode = settings.mode || "competitive";
-        document.querySelectorAll(".mode-btn").forEach(btn => {
+        document.querySelectorAll(".mode-btn").forEach((btn) => {
           btn.classList.toggle("selected", btn.dataset.mode === this.selectedMode);
         });
-      }
-
-      if (dailyStats) {
-        document.getElementById("stat-today").textContent =
-          dailyStats.focusMinutes > 0 ? `${dailyStats.focusMinutes}m` : "0m";
       }
     } catch (e) {
       console.warn("Failed to load profile:", e);
     }
   }
 
+  async loadDailyStats() {
+    try {
+      const dailyStats = await this.sendMessage({ type: "GET_DAILY_STATS" });
+      if (dailyStats) {
+        document.getElementById("stat-today").textContent =
+          dailyStats.focusMinutes > 0 ? `${dailyStats.focusMinutes}m` : "0m";
+      }
+    } catch (e) { /* non-critical */ }
+  }
+
   updateProfileUI(profile) {
     const levelInfo = this.getLevel(profile.totalXP);
-
     document.getElementById("level-icon").textContent = levelInfo.current.icon;
     document.getElementById("level-name").textContent = levelInfo.current.name;
     document.getElementById("xp-fill").style.width = `${levelInfo.progress}%`;
@@ -168,53 +422,47 @@ class PopupApp {
     try {
       const state = await this.sendMessage({ type: "GET_SESSION_STATE" });
       if (state && state.state === "active") {
-        this.sessionStartTime = state.startedAt;
-        this.sessionPausedMs = state.totalPausedMs || 0;
-        this.selectedMinutes = state.goalMinutes;
+        this.selectedMinutes   = state.goalMinutes;
         this.selectedTimerType = state.timerType;
         document.getElementById("session-goal").textContent = state.goal || "Focus Session";
         this.showScreen("active");
         this.updateActiveUI(state);
-        document.getElementById("btn-pause").style.display = "";
+        document.getElementById("btn-pause").style.display  = "";
         document.getElementById("btn-resume").style.display = "none";
       } else if (state && state.state === "paused") {
-        this.sessionStartTime = state.startedAt;
-        this.sessionPausedMs = state.totalPausedMs || 0;
-        this.selectedMinutes = state.goalMinutes;
+        this.selectedMinutes   = state.goalMinutes;
         this.selectedTimerType = state.timerType;
         document.getElementById("session-goal").textContent = state.goal || "Focus Session";
         this.showScreen("active");
         this.updateActiveUI(state);
-        document.getElementById("btn-pause").style.display = "none";
+        document.getElementById("btn-pause").style.display  = "none";
         document.getElementById("btn-resume").style.display = "";
+      } else {
+        this.showScreen("idle");
       }
     } catch (e) {
-      console.warn("No active session");
+      this.showScreen("idle");
     }
   }
 
-  // ── Mode Selection ─────────────────────────────────────────
+  // ── Mode / Timer Selection ─────────────────────────────────
 
   selectMode(btn) {
-    document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("selected"));
+    document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
     this.selectedMode = btn.dataset.mode;
     this.sendMessage({ type: "UPDATE_SETTINGS", data: { mode: this.selectedMode } });
   }
 
-  // ── Preset Selection ───────────────────────────────────────
-
   selectPreset(btn) {
-    document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("selected"));
+    document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
     this.selectedMinutes = parseInt(btn.dataset.minutes);
     document.getElementById("input-custom-minutes").value = "";
   }
 
-  // ── Timer Type ─────────────────────────────────────────────
-
   selectTimerType(btn) {
-    document.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("selected"));
+    document.querySelectorAll(".toggle-btn").forEach((b) => b.classList.remove("selected"));
     btn.classList.add("selected");
     this.selectedTimerType = btn.dataset.timer;
   }
@@ -229,21 +477,14 @@ class PopupApp {
     try {
       const result = await this.sendMessage({
         type: "START_SESSION",
-        data: {
-          goal,
-          goalMinutes: minutes,
-          timerType: this.selectedTimerType,
-          mode: this.selectedMode,
-        },
+        data: { goal, goalMinutes: minutes, timerType: this.selectedTimerType, mode: this.selectedMode },
       });
 
       if (result && result.success) {
-        this.sessionStartTime = result.session.startedAt;
-        this.sessionPausedMs = 0;
-        this.selectedMinutes = minutes;
-        document.getElementById("session-goal").textContent = goal;
-        document.getElementById("btn-pause").style.display = "";
-        document.getElementById("btn-resume").style.display = "none";
+        this.selectedMinutes   = minutes;
+        document.getElementById("session-goal").textContent   = goal;
+        document.getElementById("btn-pause").style.display    = "";
+        document.getElementById("btn-resume").style.display   = "none";
         this.showScreen("active");
       }
     } catch (e) {
@@ -254,7 +495,7 @@ class PopupApp {
   async pauseSession() {
     const result = await this.sendMessage({ type: "PAUSE_SESSION" });
     if (result && result.success) {
-      document.getElementById("btn-pause").style.display = "none";
+      document.getElementById("btn-pause").style.display  = "none";
       document.getElementById("btn-resume").style.display = "";
     }
   }
@@ -262,7 +503,7 @@ class PopupApp {
   async resumeSession() {
     const result = await this.sendMessage({ type: "RESUME_SESSION" });
     if (result && result.success) {
-      document.getElementById("btn-pause").style.display = "";
+      document.getElementById("btn-pause").style.display  = "";
       document.getElementById("btn-resume").style.display = "none";
     }
   }
@@ -270,45 +511,50 @@ class PopupApp {
   async endSession() {
     const confirmed = confirm("⚔️ End session now? Ending early may incur an XP penalty.");
     if (!confirmed) return;
+
     const result = await this.sendMessage({ type: "END_SESSION" });
     if (result && result.success) {
-      this.showResults(result);
+      const synced = await this.syncSessionToFirebase(result.sessionResult);
+      this.showResults(result, synced);
     }
   }
 
   // ── Live Timer ─────────────────────────────────────────────
 
   startLiveTimer() {
+    if (this.tickInterval) return;
     this.tickInterval = setInterval(async () => {
       if (!this.screens.active.classList.contains("active")) return;
-
       try {
         const state = await this.sendMessage({ type: "GET_SESSION_STATE" });
         if (state && (state.state === "active" || state.state === "paused")) {
           this.updateActiveUI(state);
         }
-      } catch (e) {
-        // Popup might close, that's fine
-      }
+      } catch (e) { /* popup may be closing */ }
     }, 1000);
   }
 
+  stopLiveTimer() {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = null;
+    }
+  }
+
   updateActiveUI(state) {
-    const elapsed = state.elapsedMinutes || 0;
-    const goal = state.goalMinutes || this.selectedMinutes;
-    const timerType = state.timerType || this.selectedTimerType;
+    const elapsed  = state.elapsedMinutes || 0;
+    const goal     = state.goalMinutes    || this.selectedMinutes;
+    const timerType = state.timerType    || this.selectedTimerType;
 
     let displaySeconds;
     if (timerType === "countdown") {
-      let elapsedSoFarMs;
+      let elapsedMs;
       if (state.state === "paused" && state.pausedAt) {
-        // When paused, calculate elapsed up to the moment it was paused
-        elapsedSoFarMs = (state.pausedAt - state.startedAt) - (state.totalPausedMs || 0);
+        elapsedMs = (state.pausedAt - state.startedAt) - (state.totalPausedMs || 0);
       } else {
-        elapsedSoFarMs = (Date.now() - state.startedAt) - (state.totalPausedMs || 0);
+        elapsedMs = (Date.now() - state.startedAt) - (state.totalPausedMs || 0);
       }
-      const remainingMs = Math.max(0, (goal * 60000) - elapsedSoFarMs);
-      displaySeconds = Math.ceil(remainingMs / 1000);
+      displaySeconds = Math.ceil(Math.max(0, (goal * 60000) - elapsedMs) / 1000);
       document.getElementById("timer-label").textContent = "remaining";
     } else {
       let elapsedMs;
@@ -326,74 +572,62 @@ class PopupApp {
     document.getElementById("timer-display").textContent =
       `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 
-    // Update ring progress
-    const circumference = 2 * Math.PI * 88; // r=88
-    let progress;
-    if (timerType === "countdown") {
-      progress = Math.max(0, Math.min(1, 1 - (displaySeconds / (goal * 60))));
-    } else {
-      progress = Math.min(1, elapsed / goal);
-    }
-    const offset = circumference * (1 - progress);
-    document.getElementById("timer-ring-progress").style.strokeDashoffset = offset;
+    const circumference = 2 * Math.PI * 88;
+    const progress = timerType === "countdown"
+      ? Math.max(0, Math.min(1, 1 - (displaySeconds / (goal * 60))))
+      : Math.min(1, elapsed / goal);
+    document.getElementById("timer-ring-progress").style.strokeDashoffset = circumference * (1 - progress);
 
-    // Update stats
     const activityPct = state.activityPct || 100;
     document.getElementById("stat-activity").textContent = `${activityPct}%`;
-    document.getElementById("stat-tabs").textContent = state.tabSwitchCount || 0;
+    document.getElementById("stat-tabs").textContent     = state.tabSwitchCount || 0;
+    document.getElementById("stat-score-live").textContent = Math.max(0, Math.round(elapsed * (activityPct / 100)));
 
-    // Live score estimate
-    const liveScore = Math.max(0, Math.round(elapsed * (activityPct / 100)));
-    document.getElementById("stat-score-live").textContent = liveScore;
-
-    // Activity indicator color
     const indicator = document.getElementById("activity-indicator");
     indicator.className = "session-stat-icon activity-pulse";
-    if (activityPct >= 80) indicator.classList.add("green");
+    if (activityPct >= 80)      indicator.classList.add("green");
     else if (activityPct >= 50) indicator.classList.add("yellow");
-    else indicator.classList.add("red");
+    else                        indicator.classList.add("red");
   }
 
   // ── Results ────────────────────────────────────────────────
 
-  showResults(result) {
-    const { sessionResult, xpResult, profile, levelInfo, newAchievements } = result;
+  showResults(result, synced = false) {
+    const { sessionResult, xpResult, profile, newAchievements } = result;
 
-    // Animate score count-up
     this.animateNumber("result-score", 0, sessionResult.focusScore, 1200);
-
-    // Breakdown
-    document.getElementById("result-time").textContent = `${sessionResult.durationMinutes} min`;
-    document.getElementById("result-engagement").textContent = `${sessionResult.scoreBreakdown.engagement}%`;
+    document.getElementById("result-time").textContent        = `${sessionResult.durationMinutes} min`;
+    document.getElementById("result-engagement").textContent  = `${sessionResult.scoreBreakdown.engagement}%`;
     document.getElementById("result-consistency").textContent = `${sessionResult.scoreBreakdown.consistency}x`;
-    document.getElementById("result-penalties").textContent = `-${sessionResult.scoreBreakdown.penalties.total}`;
+    document.getElementById("result-penalties").textContent   = `-${sessionResult.scoreBreakdown.penalties.total}`;
+    document.getElementById("result-xp").textContent          = xpResult.totalXP;
 
-    // XP
-    document.getElementById("result-xp").textContent = xpResult.totalXP;
-
-    // XP bonuses/penalties tags
     const bonusesContainer = document.getElementById("xp-bonuses");
     bonusesContainer.innerHTML = "";
-    xpResult.bonuses.forEach(b => {
+    xpResult.bonuses.forEach((b) => {
       const tag = document.createElement("span");
       tag.className = "xp-bonus-tag";
       tag.textContent = `+${b.value} ${b.label}`;
       bonusesContainer.appendChild(tag);
     });
-    xpResult.penalties.forEach(p => {
+    xpResult.penalties.forEach((p) => {
       const tag = document.createElement("span");
       tag.className = "xp-penalty-tag";
       tag.textContent = `${p.value} ${p.label}`;
       bonusesContainer.appendChild(tag);
     });
 
+    // Firebase sync badge
+    const syncedBadge = document.getElementById("synced-badge");
+    syncedBadge.style.display = synced ? "" : "none";
+
     // Achievements
     const achieveSection = document.getElementById("achievements-section");
-    const achieveList = document.getElementById("achievements-list");
+    const achieveList    = document.getElementById("achievements-list");
     if (newAchievements && newAchievements.length > 0) {
       achieveSection.style.display = "";
       achieveList.innerHTML = "";
-      newAchievements.forEach(a => {
+      newAchievements.forEach((a) => {
         const item = document.createElement("div");
         item.className = "achievement-item";
         item.innerHTML = `
@@ -401,35 +635,31 @@ class PopupApp {
           <div class="achievement-info">
             <div class="achievement-name">${a.name}</div>
             <div class="achievement-desc">${a.description}</div>
-          </div>
-        `;
+          </div>`;
         achieveList.appendChild(item);
       });
     } else {
       achieveSection.style.display = "none";
     }
 
-    // Update profile bar
     if (profile) this.updateProfileUI(profile);
-
     this.showScreen("results");
   }
 
-  // ── Animation Helper ───────────────────────────────────────
+  // ── Animation ──────────────────────────────────────────────
 
   animateNumber(elementId, from, to, duration) {
-    const el = document.getElementById(elementId);
+    const el    = document.getElementById(elementId);
     const start = performance.now();
-    const diff = to - from;
+    const diff  = to - from;
 
     function step(now) {
-      const elapsed = now - start;
+      const elapsed  = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+      const eased    = 1 - Math.pow(1 - progress, 3);
       el.textContent = Math.round(from + diff * eased);
       if (progress < 1) requestAnimationFrame(step);
     }
-
     requestAnimationFrame(step);
   }
 
@@ -438,14 +668,17 @@ class PopupApp {
   handleMessage(msg) {
     switch (msg.type) {
       case "SESSION_COMPLETED":
-        this.showResults(msg);
+        // Sync to Firebase then show results
+        this.syncSessionToFirebase(msg.sessionResult).then((synced) => {
+          this.showResults(msg, synced);
+        });
         break;
       case "SESSION_PAUSED":
-        document.getElementById("btn-pause").style.display = "none";
+        document.getElementById("btn-pause").style.display  = "none";
         document.getElementById("btn-resume").style.display = "";
         break;
       case "SESSION_RESUMED":
-        document.getElementById("btn-pause").style.display = "";
+        document.getElementById("btn-pause").style.display  = "";
         document.getElementById("btn-resume").style.display = "none";
         break;
     }

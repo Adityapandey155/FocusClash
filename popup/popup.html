@@ -5,24 +5,77 @@
   <meta name="viewport" content="width=400, initial-scale=1.0">
   <title>Focus Clash</title>
   <link rel="stylesheet" href="popup.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app" class="app">
-    
+
     <!-- ═══ HEADER ═══ -->
     <header class="header">
       <div class="header-left">
-        <span class="logo-icon">⚔️</span>
+        <img src="../assets/icons/icon32.png" class="logo-icon-img" width="24" height="24" alt="Focus Clash">
         <h1 class="logo-text">Focus Clash</h1>
       </div>
-      <button id="btn-dashboard" class="btn-icon" title="Dashboard">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      </button>
+      <div class="header-actions">
+        <span id="header-username" class="header-username" style="display:none"></span>
+        <button id="btn-signout" class="btn-icon btn-signout-icon" title="Sign Out" style="display:none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+        <button id="btn-dashboard" class="btn-icon" title="Dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </button>
+      </div>
     </header>
 
+    <!-- ═══ AUTH SCREEN ═══ -->
+    <div id="screen-auth" class="screen auth-screen active">
+      <div class="auth-brand">
+        <span class="auth-brand-icon">⚔️</span>
+        <h2 class="auth-brand-title">FOCUS CLASH</h2>
+        <p class="auth-brand-sub">Compete on real focus, not fake hours.</p>
+      </div>
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-auth-tab="login">Sign In</button>
+          <button class="auth-tab" data-auth-tab="signup">Create Account</button>
+        </div>
+
+        <!-- Login Form -->
+        <div class="auth-form" id="auth-form-login">
+          <div class="auth-field">
+            <input type="email" id="auth-email-login" class="input-field" placeholder="Email address" autocomplete="email">
+          </div>
+          <div class="auth-field">
+            <input type="password" id="auth-password-login" class="input-field" placeholder="Password" autocomplete="current-password">
+          </div>
+          <div id="auth-error-login" class="auth-error"></div>
+          <button id="btn-signin" class="btn-primary btn-glow auth-submit">
+            <span style="position:relative;z-index:1">Sign In ⚔️</span>
+          </button>
+        </div>
+
+        <!-- Signup Form -->
+        <div class="auth-form" id="auth-form-signup" style="display:none">
+          <div class="auth-field">
+            <input type="email" id="auth-email-signup" class="input-field" placeholder="Email address" autocomplete="email">
+          </div>
+          <div class="auth-field username-field">
+            <input type="text" id="auth-username" class="input-field" placeholder="Username (letters, numbers, _)" maxlength="20" autocomplete="off">
+            <span id="username-status" class="username-check-status"></span>
+          </div>
+          <div class="auth-field">
+            <input type="password" id="auth-password-signup" class="input-field" placeholder="Password (min 6 chars)" autocomplete="new-password">
+          </div>
+          <div id="auth-error-signup" class="auth-error"></div>
+          <button id="btn-signup" class="btn-primary btn-glow auth-submit">
+            <span style="position:relative;z-index:1">Create Account 🚀</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══ PROFILE BAR ═══ -->
-    <div id="profile-bar" class="profile-bar">
+    <div id="profile-bar" class="profile-bar" style="display:none">
       <div class="level-badge">
         <span id="level-icon" class="level-icon">🥉</span>
         <span id="level-name" class="level-name">Bronze</span>
@@ -46,7 +99,7 @@
     </div>
 
     <!-- ═══ IDLE SCREEN ═══ -->
-    <div id="screen-idle" class="screen active">
+    <div id="screen-idle" class="screen">
       <div class="mode-selector">
         <label class="mode-label">Mode</label>
         <div class="mode-buttons">
@@ -101,12 +154,12 @@
         <svg class="timer-ring" viewBox="0 0 200 200">
           <defs>
             <linearGradient id="timer-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#7c3aed"/>
-              <stop offset="100%" style="stop-color:#06b6d4"/>
+              <stop offset="0%" style="stop-color:#00ffff"/>
+              <stop offset="100%" style="stop-color:#ff0080"/>
             </linearGradient>
           </defs>
           <circle class="timer-ring-bg" cx="100" cy="100" r="88" />
-          <circle id="timer-ring-progress" class="timer-ring-progress" cx="100" cy="100" r="88" 
+          <circle id="timer-ring-progress" class="timer-ring-progress" cx="100" cy="100" r="88"
                   stroke-dasharray="553" stroke-dashoffset="0" />
         </svg>
         <div class="timer-center">
@@ -172,6 +225,9 @@
         </div>
         <div id="xp-bonuses" class="xp-bonuses"></div>
       </div>
+      <div id="synced-badge" class="synced-badge" style="display:none">
+        🌍 Score synced to global leaderboard
+      </div>
       <div id="achievements-section" class="achievements-section" style="display:none">
         <h3 class="achievements-title">🎖️ New Achievements!</h3>
         <div id="achievements-list" class="achievements-list"></div>
@@ -184,6 +240,14 @@
 
   </div>
 
+  <!-- Firebase SDK (local compat build) -->
+  <script src="../lib/vendor/firebase-app-compat.js"></script>
+  <script src="../lib/vendor/firebase-auth-compat.js"></script>
+  <script src="../lib/vendor/firebase-firestore-compat.js"></script>
+  <!-- Focus Clash Libs -->
+  <script src="../lib/firebase-config.js"></script>
+  <script src="../lib/firebase-auth.js"></script>
+  <script src="../lib/firebase-db.js"></script>
   <script src="../lib/constants.js"></script>
   <script src="popup.js"></script>
 </body>

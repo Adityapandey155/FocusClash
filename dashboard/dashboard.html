@@ -38,6 +38,20 @@
           <span>Settings</span>
         </button>
       </div>
+
+      <!-- Sidebar User Section -->
+      <div class="sidebar-user" id="sidebar-user" style="display:none">
+        <div class="sidebar-user-info">
+          <div class="sidebar-avatar">⚔️</div>
+          <div class="sidebar-user-text">
+            <div class="sidebar-username" id="sidebar-username">Loading…</div>
+            <div class="sidebar-user-email" id="sidebar-user-email"></div>
+          </div>
+        </div>
+        <button class="sidebar-signout-btn" id="btn-sidebar-signout" title="Sign Out">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
     </nav>
 
     <!-- ═══ MAIN CONTENT ═══ -->
@@ -117,11 +131,18 @@
 
       <!-- ── LEADERBOARD TAB ─── -->
       <div class="tab-content" id="tab-leaderboard">
-        <h2 class="tab-title">🏆 Personal Leaderboard</h2>
+        <h2 class="tab-title">🏆 Leaderboard</h2>
         <div class="leaderboard-tabs">
-          <button class="lb-tab active" data-lb="daily">⚡ Daily Clash</button>
-          <button class="lb-tab" data-lb="weekly">💪 Weekly Clash</button>
-          <button class="lb-tab" data-lb="deep">🧠 Deep Focus</button>
+          <button class="lb-tab active" data-lb="daily">⚡ My Daily</button>
+          <button class="lb-tab" data-lb="weekly">💪 My Weekly</button>
+          <button class="lb-tab" data-lb="deep">🧠 My Deep</button>
+          <button class="lb-tab lb-tab-global" data-lb="global">🌍 Global</button>
+        </div>
+        <!-- Global sub-type selector (shown only when global tab is active) -->
+        <div class="global-sub-tabs" id="global-sub-tabs" style="display:none">
+          <button class="global-sub-tab active" data-glb="alltime">All-Time</button>
+          <button class="global-sub-tab" data-glb="daily">Today</button>
+          <button class="global-sub-tab" data-glb="weekly">This Week</button>
         </div>
         <div class="leaderboard-list" id="leaderboard-list">
           <div class="lb-empty">No sessions yet. Start your first session!</div>
@@ -147,7 +168,7 @@
       <!-- ── SETTINGS TAB ─── -->
       <div class="tab-content" id="tab-settings">
         <h2 class="tab-title">⚙️ Settings</h2>
-        
+
         <div class="settings-section">
           <h3 class="settings-label">🚫 Blocked Sites</h3>
           <p class="settings-desc">Sites blocked during focus sessions</p>
@@ -169,7 +190,7 @@
         </div>
 
         <div class="settings-section">
-          <h3 class="settings-label">🗑️ Reset Data</h3>
+          <h3 class="settings-label">🗑️ Reset Local Data</h3>
           <p class="settings-desc">Clear all session history, achievements, and XP. This cannot be undone.</p>
           <button id="btn-reset-data" class="btn-small btn-danger">Reset All Data</button>
         </div>
@@ -178,6 +199,14 @@
     </main>
   </div>
 
+  <!-- Firebase SDK (local compat build) -->
+  <script src="../lib/vendor/firebase-app-compat.js"></script>
+  <script src="../lib/vendor/firebase-auth-compat.js"></script>
+  <script src="../lib/vendor/firebase-firestore-compat.js"></script>
+  <!-- Focus Clash Libs -->
+  <script src="../lib/firebase-config.js"></script>
+  <script src="../lib/firebase-auth.js"></script>
+  <script src="../lib/firebase-db.js"></script>
   <script src="../lib/constants.js"></script>
   <script src="dashboard.js"></script>
 </body>
