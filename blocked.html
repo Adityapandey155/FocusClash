@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Clash — Site Blocked</title>
+  <link rel="stylesheet" href="blocked.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="blocked-container">
+
+    <!-- Animated background particles -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Main card -->
+    <div class="blocked-card">
+      <div class="blocked-icon">⚔️</div>
+      <h1 class="blocked-title">Focus Clash is Active</h1>
+      <p class="blocked-subtitle">This site is blocked during your focus session.<br>Stay strong — every minute counts!</p>
+      
+      <div class="session-info" id="session-info">
+        <div class="info-item">
+          <span class="info-icon">⏱️</span>
+          <span class="info-label">Session Time</span>
+          <span class="info-value" id="blocked-timer">--:--</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+          <span class="info-icon">🎯</span>
+          <span class="info-label">Current Score</span>
+          <span class="info-value" id="blocked-score">0</span>
+        </div>
+      </div>
+
+      <div class="quote-section">
+        <p class="quote-text" id="quote-text">"The secret of getting ahead is getting started."</p>
+        <p class="quote-author" id="quote-author">— Mark Twain</p>
+      </div>
+
+      <div class="blocked-actions">
+        <button id="btn-go-back" class="btn-back">← Go Back to Studying</button>
+      </div>
+
+      <div class="penalty-warning">
+        <span class="warning-icon">⚠️</span>
+        <span>Repeated attempts to visit blocked sites will reduce your XP</span>
+      </div>
+    </div>
+
+    <!-- Floating swords decoration -->
+    <div class="deco-sword deco-sword-1">🗡️</div>
+    <div class="deco-sword deco-sword-2">🛡️</div>
+  </div>
+
+  <script>
+    // ── Quote rotation ──────────────────────────────────────
+    const quotes = [
+      { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+      { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
+      { text: "It's not that I'm so smart, it's just that I stay with problems longer.", author: "Albert Einstein" },
+      { text: "The successful warrior is the average man, with laser-like focus.", author: "Bruce Lee" },
+      { text: "Concentrate all your thoughts upon the work at hand.", author: "Alexander Graham Bell" },
+      { text: "Do what you can, with what you have, where you are.", author: "Theodore Roosevelt" },
+      { text: "Your focus determines your reality.", author: "Qui-Gon Jinn" },
+      { text: "Starve your distractions, feed your focus.", author: "Daniel Goleman" },
+      { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+      { text: "Small daily improvements over time lead to stunning results.", author: "Robin Sharma" },
+      { text: "Winners focus on winning. Losers focus on winners.", author: "Eric Thomas" },
+      { text: "Where focus goes, energy flows.", author: "Tony Robbins" },
+    ];
+
+    const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+    document.getElementById("quote-text").textContent = `"${randomQuote.text}"`;
+    document.getElementById("quote-author").textContent = `— ${randomQuote.author}`;
+
+    // ── Go back button ──────────────────────────────────────
+    document.getElementById("btn-go-back").addEventListener("click", () => {
+      if (history.length > 1) {
+        history.back();
+      } else {
+        window.close();
+      }
+    });
+
+    // ── Session info from background ────────────────────────
+    if (typeof chrome !== "undefined" && chrome.runtime) {
+      chrome.runtime.sendMessage({ type: "GET_SESSION_STATE" }, (response) => {
+        if (chrome.runtime.lastError || !response) return;
+        if (response.state === "active" || response.state === "paused") {
+          const elapsed = response.elapsedMinutes || 0;
+          const goal = response.goalMinutes || 60;
+          const remaining = Math.max(0, goal - elapsed);
+          document.getElementById("blocked-timer").textContent = 
+            `${String(remaining).padStart(2, "0")}:00`;
+          
+          const score = Math.round(elapsed * ((response.activityPct || 100) / 100));
+          document.getElementById("blocked-score").textContent = score;
+        }
+      });
+    }
+
+    // ── Create background particles ─────────────────────────
+    const particlesContainer = document.getElementById("particles");
+    for (let i = 0; i < 30; i++) {
+      const particle = document.createElement("div");
+      particle.className = "particle";
+      particle.style.left = Math.random() * 100 + "%";
+      particle.style.top = Math.random() * 100 + "%";
+      particle.style.animationDelay = Math.random() * 6 + "s";
+      particle.style.animationDuration = (4 + Math.random() * 6) + "s";
+      particle.style.width = particle.style.height = (2 + Math.random() * 4) + "px";
+      particlesContainer.appendChild(particle);
+    }
+  </script>
+</body>
+</html>
